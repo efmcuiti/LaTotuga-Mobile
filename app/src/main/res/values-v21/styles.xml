@@ -1,0 +1,19 @@
+<resources>
+
+    <style name="LaTotugaTheme" parent="LaTotugaTheme.Base">
+    </style>
+    <!-- Base application theme. -->
+    <style name="LaTotugaTheme.Base" parent="Theme.AppCompat.Light.DarkActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <!-- No action bar needed since we're going to use ToolBar. -->
+        <item name="android:windowActionBar">false</item>
+        <!-- The main color will be used as default by the ToolBar. -->
+        <item name="android:colorPrimary">#2196F3</item>
+        <!-- The dark main will be used by the status bar. -->
+        <item name="android:colorPrimaryDark">#1976D2</item>
+        <!-- colorAccent is used as the default value for colorControlActivated
+         which is used to tint widgets -->
+        <item name="android:colorAccent">#FF5722</item>
+    </style>
+</resources>
