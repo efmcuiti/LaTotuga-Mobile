@@ -3,6 +3,7 @@
 
     <string name="app_name">LaTotuga</string>
     <string name="action_search">Type a name here!</string>
+    <string name="search_hint">Search names</string>
     <string name="action_settings">Settings</string>
 
 </resources>
