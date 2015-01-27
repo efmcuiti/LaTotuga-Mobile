@@ -7,18 +7,24 @@
  */
 package org.tjdo.latotuga;
 
+import android.content.res.Resources;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.support.v7.widget.SearchView;
 import android.support.v7.widget.Toolbar;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.ArrayAdapter;
+import android.widget.Spinner;
 
 /**
  * Main entrance for the application.
  * @author efmcuiti (efmcuiti@gmail.com)
  */
 public class LaTotugaActivity extends ActionBarActivity {
+
+    /** Where to look for strings and all that stuff. */
+    private Resources res;
 
     /* (non-Javadoc)
 	 * @see android.support.v7.app.ActionBarActivity#onCreate(android.os.Bundle)
@@ -27,11 +33,21 @@ public class LaTotugaActivity extends ActionBarActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_la_totuga);
+        res = getResources();
 
         // Setting up the "action bar"
         Toolbar toolbar = (Toolbar)findViewById(R.id.toolBar);
+        toolbar.setTitle(res.getString(R.string.app_name));
+        toolbar.setLogo(R.drawable.tortuga);
         setSupportActionBar(toolbar);
-        getSupportActionBar().setDisplayShowTitleEnabled(false);
+
+        // Setting the spinner content.
+        Spinner spinner = (Spinner) findViewById(R.id.symphonySpinner);
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(
+                this, R.array.shyphonies, android.R.layout.simple_spinner_item
+        );
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
     }
 
     /* (non-Javadoc)
@@ -43,7 +59,6 @@ public class LaTotugaActivity extends ActionBarActivity {
         getMenuInflater().inflate(R.menu.menu_la_totuga, menu);
         MenuItem searchItem = menu.findItem(R.id.action_search);
         SearchView searchView = (SearchView)searchItem.getActionView();
-        searchView.setQueryHint("Just testing!");
         return true;
     }
 
