@@ -8,14 +8,25 @@
 package org.tjdo.latotuga;
 
 import android.content.res.Resources;
+import android.os.AsyncTask;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.support.v7.widget.SearchView;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.ArrayAdapter;
 import android.widget.Spinner;
+
+import org.tjdo.latotuga.org.tjdo.latotuga.util.Constants;
+import org.tjdo.services.LaTotugaFactory;
+import org.tjdo.services.dto.AuthenticateResponse;
+import org.tjdo.services.dto.Symphony;
+import org.tjdo.util.LaTotugaException;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Main entrance for the application.
@@ -23,8 +34,14 @@ import android.widget.Spinner;
  */
 public class LaTotugaActivity extends ActionBarActivity {
 
+    /** Used to log messages to the console. */
+    private static final String TAG = "LaTotuga";
+
     /** Where to look for strings and all that stuff. */
     private Resources res;
+
+    /** Set of actual symphonies to be used. */
+    private List<Symphony> symphonies;
 
     /* (non-Javadoc)
 	 * @see android.support.v7.app.ActionBarActivity#onCreate(android.os.Bundle)
@@ -42,12 +59,51 @@ public class LaTotugaActivity extends ActionBarActivity {
         setSupportActionBar(toolbar);
 
         // Setting the spinner content.
-        Spinner spinner = (Spinner) findViewById(R.id.symphonySpinner);
-        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(
-                this, R.array.shyphonies, android.R.layout.simple_spinner_item
-        );
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinner.setAdapter(adapter);
+        AsyncTask<Void, Void, List<String>>
+                symphoniesTask = new AsyncTask<Void, Void, List<String>>() {
+            /**
+             * @see {@link AsyncTask#doInBackground(Object[])}
+             */
+            @Override
+            protected List<String> doInBackground(Void... params) {
+                List<String> answer = new ArrayList<>();
+
+                try {
+                    AuthenticateResponse response = LaTotugaFactory.getServices(
+                            LaTotugaActivity.this).authenticate(
+                            Constants.LATOTUGA_USERNAME, Constants.LATOTUGA_PASSWORD);
+
+                    if (response.isSuccess()) {
+                        // 1. The whole object may be needed forward in time.
+                        symphonies = response.getSinfonias();
+
+                        // 2. Building the actual response.
+                        for (Symphony s : symphonies) {
+                            answer.add(s.getNombre());
+                        }
+                    }
+                } catch (LaTotugaException e) {
+                    Log.e(TAG, String.format("Couldn't authenticate with username: %s",
+                            Constants.LATOTUGA_USERNAME), e);
+                }
+
+                return answer;
+            }
+
+            /**
+             * @see {@link AsyncTask#doInBackground(Object[])}
+             */
+            @Override
+            protected void onPostExecute(List<String> symphonies) {
+                Spinner spinner = (Spinner) findViewById(R.id.symphonySpinner);
+                ArrayAdapter<String> adapter = new ArrayAdapter<String>(
+                        LaTotugaActivity.this, android.R.layout.simple_spinner_item, symphonies);
+                adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                spinner.setAdapter(adapter);
+            }
+        };
+
+        symphoniesTask.execute();
     }
 
     /* (non-Javadoc)

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="error_password_encoding">Could not create the hash for the password.</string>
+    <string name="error_rest_authentication">The user %s could not be authenticated, please verify the login and password.</string>
+    <string name="error_rest_burn">Could not register the %d burns in the server.</string>
+    <string name="error_rest_names">No names found for symphony %s.</string>
+</resources>

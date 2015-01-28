@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="authenticate_provider">http://admin.latotuga.com/autenticacion</string>
+    <string name="burn_provider">http://admin.latotuga.com/quemar</string>
+    <string name="names_provider">http://admin.latotuga.com/obtener_nombres</string>
+</resources>
