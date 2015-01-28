@@ -7,6 +7,8 @@
  */
 package org.tjdo.latotuga;
 
+import android.app.SearchManager;
+import android.content.Context;
 import android.content.res.Resources;
 import android.os.AsyncTask;
 import android.support.v7.app.ActionBarActivity;
@@ -113,8 +115,15 @@ public class LaTotugaActivity extends ActionBarActivity {
     public boolean onCreateOptionsMenu(Menu menu) {
         // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.menu_la_totuga, menu);
-        MenuItem searchItem = menu.findItem(R.id.action_search);
+
+        // Configuring the search widget.
+        SearchManager searchManager = (SearchManager) getSystemService(Context.SEARCH_SERVICE);
+        MenuItem searchItem = menu.findItem(R.id.name_search);
         SearchView searchView = (SearchView)searchItem.getActionView();
+
+        // The following works if and only if this activity is the search activity.
+        searchView.setSearchableInfo(searchManager.getSearchableInfo(getComponentName()));
+
         return true;
     }
 
