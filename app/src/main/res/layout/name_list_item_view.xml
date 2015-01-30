@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/name_item_layout"
+    android:orientation="horizontal" android:layout_width="match_parent"
+    android:layout_height="48dp">
+    <TextView
+        android:id="@+id/initial_letter_item"
+        android:layout_width="48dp"
+        android:textColor="#1976D2"
+        android:text="CH"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_height="48dp"
+        android:layout_marginLeft="16dp"
+        android:layout_marginRight="16dp"
+        android:layout_marginTop="16dp"/>
+    <TextView
+        android:id="@+id/name_item"
+        android:layout_width="wrap_content"
+        android:text="ADNAN DID IT!"
+        android:textColor="#212121"
+        android:textSize="20sp"
+        android:layout_height="48dp"
+        android:layout_marginLeft="8dp"
+        android:layout_marginRight="16dp"
+        android:layout_marginTop="16dp"/>
+</LinearLayout>

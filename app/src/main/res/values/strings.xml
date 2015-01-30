@@ -7,6 +7,13 @@
     <string name="action_settings">Settings</string>
     <string name="player_no_name">No name played</string>
     <string name="player_no_name_sub">Here goes a symphony</string>
+    <string name="loading_data">Please wait, loading data</string>
+    <string name="querying_symphony_names">Loading names for</string>
+    <string name="no_external_storage">Couldn\'t find external storage</string>
+    <string name="symphonies_file_name">symphonies.csv</string>
+    <string name="csv_separator">;</string>
+    <string name="names_file_name">names.csv</string>
+    <string name="reels_directory_name">reels</string>
     <string-array name="shyphonies">
         <item>No1. The Symphony of ...</item>
         <item>No2. The Laugh virus</item>
