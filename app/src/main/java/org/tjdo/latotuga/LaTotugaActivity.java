@@ -10,6 +10,7 @@ package org.tjdo.latotuga;
 import android.app.ProgressDialog;
 import android.app.SearchManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.Resources;
 import android.os.AsyncTask;
 import android.os.Environment;
@@ -20,6 +21,8 @@ import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.Spinner;
@@ -31,12 +34,22 @@ import org.tjdo.latotuga.org.tjdo.latotuga.util.Util;
 import org.tjdo.services.dto.Name;
 import org.tjdo.services.dto.Symphony;
 import org.tjdo.util.LaTotugaException;
+import org.tjdo.util.UnZip;
 
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 /**
  * Main entrance for the application.
@@ -46,6 +59,9 @@ public class LaTotugaActivity extends ActionBarActivity {
 
     /** Used to log messages to the console. */
     private static final String TAG = "LaTotuga";
+
+    /** When a search is issued, we must inform the selected symphony. */
+    private static final String EXTRA_SYMPHONY = "symphony";
 
     /** Where to look for strings and all that stuff. */
     private Resources res;
@@ -57,10 +73,16 @@ public class LaTotugaActivity extends ActionBarActivity {
     private Map<Symphony, List<Name>> childrenNames;
 
     /** Basic adapter to use with the names list view. */
-    private NameListAdapter listAdapter;
+    private ChildrenListAdapter listAdapter;
 
     /** This one will be used to know when to query the info from the servers. */
     private boolean queryServer;
+
+    /** Used to filter results. */
+    private String search;
+
+    /** Used when the intent is a search. */
+    private int selectedSymphony;
 
     /* (non-Javadoc)
 	 * @see android.support.v7.app.ActionBarActivity#onCreate(android.os.Bundle)
@@ -71,7 +93,6 @@ public class LaTotugaActivity extends ActionBarActivity {
         setContentView(R.layout.activity_la_totuga);
         res = getResources();
         childrenNames = new HashMap<>();
-        listAdapter = new NameListAdapter(getApplicationContext());
 
         // If no external storage is present, this application shall fail!.
         if (!Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
@@ -79,6 +100,15 @@ public class LaTotugaActivity extends ActionBarActivity {
                     res.getString(R.string.no_external_storage),
                     Toast.LENGTH_LONG).show();
             finish();
+        }
+
+        // Validating if the intent correspond to a search.
+        Intent i = getIntent();
+        if (Intent.ACTION_SEARCH.equals(i.getAction())) {
+            search = i.getStringExtra(SearchManager.QUERY);
+            Log.i(TAG, String.format("Looking for: %s", search));
+            selectedSymphony = i.getIntExtra(EXTRA_SYMPHONY, 0);
+            Log.i(TAG, String.format("Found selected symphony: %s", selectedSymphony));
         }
 
         // Setting flag for querying server.
@@ -159,9 +189,9 @@ public class LaTotugaActivity extends ActionBarActivity {
              * @see {@link AsyncTask#doInBackground(Object[])}
              */
             @Override
-            protected void onPostExecute(List<String> symphonies) {
+            protected void onPostExecute(final List<String> symphonies) {
                 super.onPostExecute(symphonies);
-                Spinner spinner = (Spinner) findViewById(R.id.symphonySpinner);
+                final Spinner spinner = (Spinner) findViewById(R.id.symphonySpinner);
                 ArrayAdapter<String> adapter = new ArrayAdapter<String>(
                         LaTotugaActivity.this, android.R.layout.simple_spinner_item, symphonies);
                 adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
@@ -169,8 +199,40 @@ public class LaTotugaActivity extends ActionBarActivity {
 
                 // Setting the basic context for the list view.
                 final ListView namesList = (ListView) findViewById(R.id.namesList);
-                loadInitialNames();
+                namesList.setFastScrollEnabled(true);
+                List<String> children = loadInitialNames();
+                Collections.sort(children);
+                listAdapter = new ChildrenListAdapter(getApplicationContext(), children);
+                spinner.setSelection(selectedSymphony);
+                spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                    @Override
+                    public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                        selectedSymphony = spinner.getSelectedItemPosition();
+                        List<String> _children = loadInitialNames();
+                        Collections.sort(_children);
+                        ChildrenListAdapter adapter = new ChildrenListAdapter(
+                                getApplicationContext(), _children);
+                        namesList.setAdapter(adapter);
+                    }
+
+                    @Override
+                    public void onNothingSelected(AdapterView<?> parent) {
+
+                    }
+                });
                 namesList.setAdapter(listAdapter);
+                namesList.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+                    @Override
+                    public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                        // Getting the selected symphony and name to download.
+                        Symphony s = LaTotugaActivity.this.symphonies.get(selectedSymphony);
+                        Name _n = null;
+                        List<Name> names = childrenNames.get(s);
+                        _n = names.get(position);
+                        Log.i(TAG, String.format("Selected name %s", _n.getNombre()));
+                        downloadName(s, _n);
+                    }
+                });
                 if (progress != null) {
                     progress.dismiss();
                 }
@@ -190,22 +252,173 @@ public class LaTotugaActivity extends ActionBarActivity {
     }
 
     /**
+     * Given a symphony and a name, this method downloads the reel using a background task.
+     * @param s Owner of the reel.
+     * @param n Name to download.
+     */
+    private void downloadName(final Symphony s, final Name n) {
+        AsyncTask<Void, Integer, File>
+                reelTask = new AsyncTask<Void, Integer, File>() {
+            /** Generic waiting process dialog for long batch operations. */
+            private ProgressDialog progress;
+
+            /**
+             * @see {@link AsyncTask#onPreExecute()}
+             */
+            @Override
+            protected void onPreExecute() {
+                super.onPreExecute();
+                progress = new ProgressDialog(LaTotugaActivity.this);
+                String title =
+                        progress.getContext().getResources().getString(R.string.app_name);
+                String msg =
+                        progress.getContext().getResources().getString(R.string.downloading_reel)
+                        + " " + n.getNombre();
+                progress.setTitle(title);
+                progress.setMessage(msg);
+                progress.setIndeterminate(false);
+                progress.show();
+            }
+
+            /** {@inheritDoc} */
+            @Override
+            protected void onProgressUpdate(Integer... values) {
+                super.onProgressUpdate(values);
+                progress.setProgress(values[0]);
+            }
+
+            /** {@inheritDoc} */
+            @Override
+            protected File doInBackground(Void... params) {
+                File mp3 = null;
+                BufferedInputStream bis = null;
+                BufferedOutputStream bos = null;
+
+                try {
+                    // 1. Define where will the reel be saved.
+                    String concrete = s.getRuta() + File.separator +
+                        res.getString(R.string.reels_directory_name) + File.separator;
+                    File targetDir = new File(getExternalFilesDir(null), concrete);
+
+                    // 2. Define the remote URL where to get the name from.
+                    String sX = "S" + s.getId_sinfonia() + "/";
+                    String _url = Constants.LATOTUGA_REELS_URL_BASE + sX + n.getRuta();
+
+                    URL url = new URL(_url);
+
+                    // 3. Define the file to save the reel to.
+                    File goal = new File(targetDir, n.getRuta());
+                    mp3 = new File(targetDir, n.getRuta().replaceAll(
+                            Constants.ZIP_EXT, Constants.MP3_EXT));
+
+                    // 3.1. If the reel have been downloaded already, we need no more.
+                    if (mp3.exists()) {
+                        return mp3;
+                    }
+
+                    // 4. Connecting and getting the file size.
+                    // Preparing also everything to download.
+                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                    int size = connection.getContentLength();
+                    int totalRead = 0;
+
+                    bis = new BufferedInputStream(connection.getInputStream());
+                    FileOutputStream fos = new FileOutputStream(goal);
+                    bos = new BufferedOutputStream(fos, Constants.BLOCK_SIZE);
+                    byte data[] = new byte[Constants.BLOCK_SIZE];
+
+                    // 5. Downloading the song.
+                    int i;
+                    float percent;
+                    while (((i = bis.read(data, 0, Constants.BLOCK_SIZE)) >= 0)
+                            && !(isCancelled())) {
+                        totalRead += i;
+                        bos.write(data, 0, i);
+                        percent = (totalRead / 100) / size;
+
+                        // Notifying the progress.
+                        publishProgress((int) percent);
+                    }
+
+                    // 6. Unzipping the file so we can retain only the mp3 file.
+                    // After that we should remove the zip file.
+                    UnZip.unZip(goal, mp3);
+                    goal.delete();
+                } catch (IOException e) {
+                    Log.e(TAG, String.format("Coudln't download reel! %s", n.getNombre()), e);
+                } finally {
+                    try {
+                        if (bis != null) {
+                            bis.close();
+                        }
+
+                        if (bos != null) {
+                            bos.flush();
+                            bos.close();
+                        }
+
+                    } catch (IOException e) {
+                        Log.e(TAG, String.format("Coudln't download reel! %s", n.getNombre()), e);
+                    }
+                }
+
+                return mp3;
+            }
+
+            /** {@inheritDoc} */
+            @Override
+            protected void onPostExecute(File file) {
+                super.onPostExecute(file);
+                if (progress != null) {
+                    progress.dismiss();
+                }
+            }
+        };
+
+        reelTask.execute();
+
+        // Getting the file to reproduce.
+        try {
+            File reel = reelTask.get();
+            Log.i(TAG, String.format("Found reel!! %s", reel.getName()));
+        } catch (InterruptedException e) {
+            Log.e(TAG, String.format("Coudln't download reel! %s", n.getNombre()), e);
+        } catch (ExecutionException e) {
+            Log.e(TAG, String.format("Coudln't download reel! %s", n.getNombre()), e);
+        }
+    }
+
+    /**
      * Updates the list view adapter with the names for the first found symphony.
      */
-    private void loadInitialNames() {
+    private List<String> loadInitialNames() {
+        List<String> result = new ArrayList<>();
         // 1. Get the first symphony.
-        Symphony s = symphonies.get(0);
+        Symphony s = symphonies.get(selectedSymphony);
 
         // 2. Find the list of names.
         List<Name> children = childrenNames.get(s);
+
+        // 3. If the user is searching for a name, this will be shortened.
+        boolean filter = (search != null) && !("".equalsIgnoreCase(search.trim()));
 
         // 3. Updates the list view with all the names.
         NameItem name = null;
         for(Name n : children) {
             name = new NameItem();
-            name.setName(n.getNombre());
-            listAdapter.add(name);
+            if (filter) {
+                search = search.toUpperCase();
+                if (n.getNombre().startsWith(search)) {
+                    name.setName(n.getNombre());
+                    result.add(name.getName());
+                }
+            } else {
+                name.setName(n.getNombre());
+                result.add(name.getName());
+            }
         }
+
+        return result;
     }
 
     /* (non-Javadoc)
@@ -223,6 +436,7 @@ public class LaTotugaActivity extends ActionBarActivity {
 
         // The following works if and only if this activity is the search activity.
         searchView.setSearchableInfo(searchManager.getSearchableInfo(getComponentName()));
+        searchView.setQueryRefinementEnabled(true);
 
         return true;
     }
@@ -268,5 +482,26 @@ public class LaTotugaActivity extends ActionBarActivity {
         }
 
         queryServer = true;
+    }
+
+    /**
+     * Same as {@link #startActivity(android.content.Intent, android.os.Bundle)} with no options
+     * specified.
+     *
+     * @param intent The intent to start.
+     * @throws android.content.ActivityNotFoundException
+     * @see {@link #startActivity(android.content.Intent, android.os.Bundle)}
+     * @see #startActivityForResult
+     */
+    @Override
+    public void startActivity(Intent intent) {
+        // Adding the selected symphony.
+        if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
+            Spinner symphonies = (Spinner) findViewById(R.id.symphonySpinner);
+            int s = symphonies.getSelectedItemPosition();
+            intent.putExtra(EXTRA_SYMPHONY, s);
+        }
+
+        super.startActivity(intent);
     }
 }

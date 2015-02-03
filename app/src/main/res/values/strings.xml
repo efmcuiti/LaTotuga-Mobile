@@ -8,6 +8,7 @@
     <string name="player_no_name">No name played</string>
     <string name="player_no_name_sub">Here goes a symphony</string>
     <string name="loading_data">Please wait, loading data</string>
+    <string name="downloading_reel">Please wait, downloading reel for</string>
     <string name="querying_symphony_names">Loading names for</string>
     <string name="no_external_storage">Couldn\'t find external storage</string>
     <string name="symphonies_file_name">symphonies.csv</string>
