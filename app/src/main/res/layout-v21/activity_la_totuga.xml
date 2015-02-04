@@ -66,6 +66,7 @@
             android:background="?attr/colorPrimary"
             android:src="@drawable/ic_action_play"/>
         <ImageButton
+            android:id="@+id/stopButton"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_marginLeft="4dp"

@@ -12,6 +12,8 @@ import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
+import android.media.MediaPlayer;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
 import android.support.v7.app.ActionBarActivity;
@@ -24,32 +26,32 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.ImageButton;
+import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.SeekBar;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import org.tjdo.latotuga.org.tjdo.latotuga.util.Constants;
+import org.tjdo.latotuga.org.tjdo.latotuga.util.DownloadTask;
 import org.tjdo.latotuga.org.tjdo.latotuga.util.NameItem;
 import org.tjdo.latotuga.org.tjdo.latotuga.util.Util;
 import org.tjdo.services.dto.Name;
 import org.tjdo.services.dto.Symphony;
 import org.tjdo.util.LaTotugaException;
-import org.tjdo.util.UnZip;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.File;
-import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 
 /**
  * Main entrance for the application.
@@ -84,6 +86,24 @@ public class LaTotugaActivity extends ActionBarActivity {
     /** Used when the intent is a search. */
     private int selectedSymphony;
 
+    /** Linked at runtime with the reel on playing. */
+    private SeekBar playerSeek;
+
+    /** Used to play/pause a reel. */
+    private ImageButton playButton;
+
+    /** Used to stop/reset a reel. */
+    private ImageButton stopButton;
+
+    /** Android component to play files. */
+    private MediaPlayer player;
+
+    /** Where to paint the actual child whose reel is being played. */
+    private TextView childNameLabel;
+
+    /** WHere to paint the actual symphony to which the child reel is playing. */
+    private TextView symphonyNameLabel;
+
     /* (non-Javadoc)
 	 * @see android.support.v7.app.ActionBarActivity#onCreate(android.os.Bundle)
 	 */
@@ -101,6 +121,13 @@ public class LaTotugaActivity extends ActionBarActivity {
                     Toast.LENGTH_LONG).show();
             finish();
         }
+
+        // Init player component.
+        playerSeek = (SeekBar) findViewById(R.id.playerSeek);
+        childNameLabel = (TextView) findViewById(R.id.playerNameLabel);
+        symphonyNameLabel = (TextView) findViewById(R.id.playerSymphonyLabel);
+        playButton = (ImageButton) findViewById(R.id.playButton);
+        stopButton = (ImageButton) findViewById(R.id.stopButton);
 
         // Validating if the intent correspond to a search.
         Intent i = getIntent();
@@ -226,11 +253,21 @@ public class LaTotugaActivity extends ActionBarActivity {
                     public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                         // Getting the selected symphony and name to download.
                         Symphony s = LaTotugaActivity.this.symphonies.get(selectedSymphony);
+                        // The name shall be located through its view because search filters.
+                        LinearLayout layout = (LinearLayout) view;
+                        TextView name = (TextView) layout.findViewById(R.id.name_item);
+                        String raw = name.getText().toString();
                         Name _n = null;
                         List<Name> names = childrenNames.get(s);
-                        _n = names.get(position);
+                        for (Name n : names) {
+                            if(raw.equalsIgnoreCase(n.getNombre())) {
+                                _n = n;
+                                break;
+                            }
+                        }
                         Log.i(TAG, String.format("Selected name %s", _n.getNombre()));
                         downloadName(s, _n);
+
                     }
                 });
                 if (progress != null) {
@@ -258,134 +295,28 @@ public class LaTotugaActivity extends ActionBarActivity {
      */
     private void downloadName(final Symphony s, final Name n) {
         AsyncTask<Void, Integer, File>
-                reelTask = new AsyncTask<Void, Integer, File>() {
-            /** Generic waiting process dialog for long batch operations. */
-            private ProgressDialog progress;
-
-            /**
-             * @see {@link AsyncTask#onPreExecute()}
-             */
-            @Override
-            protected void onPreExecute() {
-                super.onPreExecute();
-                progress = new ProgressDialog(LaTotugaActivity.this);
-                String title =
-                        progress.getContext().getResources().getString(R.string.app_name);
-                String msg =
-                        progress.getContext().getResources().getString(R.string.downloading_reel)
-                        + " " + n.getNombre();
-                progress.setTitle(title);
-                progress.setMessage(msg);
-                progress.setIndeterminate(false);
-                progress.show();
-            }
-
-            /** {@inheritDoc} */
-            @Override
-            protected void onProgressUpdate(Integer... values) {
-                super.onProgressUpdate(values);
-                progress.setProgress(values[0]);
-            }
-
-            /** {@inheritDoc} */
-            @Override
-            protected File doInBackground(Void... params) {
-                File mp3 = null;
-                BufferedInputStream bis = null;
-                BufferedOutputStream bos = null;
-
-                try {
-                    // 1. Define where will the reel be saved.
-                    String concrete = s.getRuta() + File.separator +
-                        res.getString(R.string.reels_directory_name) + File.separator;
-                    File targetDir = new File(getExternalFilesDir(null), concrete);
-
-                    // 2. Define the remote URL where to get the name from.
-                    String sX = "S" + s.getId_sinfonia() + "/";
-                    String _url = Constants.LATOTUGA_REELS_URL_BASE + sX + n.getRuta();
-
-                    URL url = new URL(_url);
-
-                    // 3. Define the file to save the reel to.
-                    File goal = new File(targetDir, n.getRuta());
-                    mp3 = new File(targetDir, n.getRuta().replaceAll(
-                            Constants.ZIP_EXT, Constants.MP3_EXT));
-
-                    // 3.1. If the reel have been downloaded already, we need no more.
-                    if (mp3.exists()) {
-                        return mp3;
-                    }
-
-                    // 4. Connecting and getting the file size.
-                    // Preparing also everything to download.
-                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                    int size = connection.getContentLength();
-                    int totalRead = 0;
-
-                    bis = new BufferedInputStream(connection.getInputStream());
-                    FileOutputStream fos = new FileOutputStream(goal);
-                    bos = new BufferedOutputStream(fos, Constants.BLOCK_SIZE);
-                    byte data[] = new byte[Constants.BLOCK_SIZE];
-
-                    // 5. Downloading the song.
-                    int i;
-                    float percent;
-                    while (((i = bis.read(data, 0, Constants.BLOCK_SIZE)) >= 0)
-                            && !(isCancelled())) {
-                        totalRead += i;
-                        bos.write(data, 0, i);
-                        percent = (totalRead / 100) / size;
-
-                        // Notifying the progress.
-                        publishProgress((int) percent);
-                    }
-
-                    // 6. Unzipping the file so we can retain only the mp3 file.
-                    // After that we should remove the zip file.
-                    UnZip.unZip(goal, mp3);
-                    goal.delete();
-                } catch (IOException e) {
-                    Log.e(TAG, String.format("Coudln't download reel! %s", n.getNombre()), e);
-                } finally {
-                    try {
-                        if (bis != null) {
-                            bis.close();
-                        }
-
-                        if (bos != null) {
-                            bos.flush();
-                            bos.close();
-                        }
-
-                    } catch (IOException e) {
-                        Log.e(TAG, String.format("Coudln't download reel! %s", n.getNombre()), e);
-                    }
-                }
-
-                return mp3;
-            }
-
-            /** {@inheritDoc} */
-            @Override
-            protected void onPostExecute(File file) {
-                super.onPostExecute(file);
-                if (progress != null) {
-                    progress.dismiss();
-                }
-            }
-        };
+                reelTask = new DownloadTask(LaTotugaActivity.this, s, n);
 
         reelTask.execute();
+    }
 
-        // Getting the file to reproduce.
-        try {
-            File reel = reelTask.get();
-            Log.i(TAG, String.format("Found reel!! %s", reel.getName()));
-        } catch (InterruptedException e) {
-            Log.e(TAG, String.format("Coudln't download reel! %s", n.getNombre()), e);
-        } catch (ExecutionException e) {
-            Log.e(TAG, String.format("Coudln't download reel! %s", n.getNombre()), e);
-        }
+    /**
+     * Call back used by the download task once it's finished.
+     * @param mp3 Reel to play.
+     * @param s Symphony parent for the reel.
+     * @param n Name of the child to be showed.
+     */
+    public void onReelDownloaded(File mp3, Symphony s, Name n) {
+        Log.i(TAG, String.format("Reel ready! %s", mp3.getName()));
+
+        // 1. Set the child name and the symphony.
+        childNameLabel.setText(n.getNombre());
+        symphonyNameLabel.setText(s.getNombre());
+
+        // 2. Prepare the media player.
+        Uri uri = Uri.fromFile(mp3);
+        player = MediaPlayer.create(this, uri);
+        playerSeek.setMax(player.getDuration());
     }
 
     /**
