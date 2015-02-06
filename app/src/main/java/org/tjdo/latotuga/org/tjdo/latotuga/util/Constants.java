@@ -31,4 +31,7 @@ public class Constants {
 
     /** Default mp3 file extension. */
     public static final String MP3_EXT = ".mp3";
+
+    /** Interval in milliseconds to update the reels player. */
+    public static final int SEEKER_DELAY = 1000;
 }

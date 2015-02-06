@@ -16,6 +16,7 @@ import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
+import android.os.Handler;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.support.v7.widget.SearchView;
@@ -26,7 +27,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
-import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -44,9 +44,6 @@ import org.tjdo.services.dto.Symphony;
 import org.tjdo.util.LaTotugaException;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -104,6 +101,12 @@ public class LaTotugaActivity extends ActionBarActivity {
     /** WHere to paint the actual symphony to which the child reel is playing. */
     private TextView symphonyNameLabel;
 
+    /** Handles the update of the reel player. */
+    private Handler seekHandler;
+
+    /** Updates the seeker. */
+    private Runnable updater;
+
     /* (non-Javadoc)
 	 * @see android.support.v7.app.ActionBarActivity#onCreate(android.os.Bundle)
 	 */
@@ -123,11 +126,54 @@ public class LaTotugaActivity extends ActionBarActivity {
         }
 
         // Init player component.
+        seekHandler = new Handler();
         playerSeek = (SeekBar) findViewById(R.id.playerSeek);
         childNameLabel = (TextView) findViewById(R.id.playerNameLabel);
         symphonyNameLabel = (TextView) findViewById(R.id.playerSymphonyLabel);
         playButton = (ImageButton) findViewById(R.id.playButton);
         stopButton = (ImageButton) findViewById(R.id.stopButton);
+        playButton.setOnClickListener(new View.OnClickListener() {
+            /** {@inheritDoc} */
+            @Override
+            public void onClick(View v) {
+                onPlayAction(v);
+            }
+        });
+        stopButton.setOnClickListener(new View.OnClickListener() {
+            /** {@inheritDoc} */
+            @Override
+            public void onClick(View v) {
+                onStopAction(v);
+            }
+        });
+        updater = new Runnable() {
+            /** {@inheritDoc} */
+            @Override
+            public void run() {
+                updatePlayer();
+            }
+        };
+        playerSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            /** {@inheritDoc} */
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (player != null) {
+                    player.seekTo(progress);
+                }
+            }
+
+            /** {@inheritDoc} */
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            /** {@inheritDoc} */
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+            }
+        });
 
         // Validating if the intent correspond to a search.
         Intent i = getIntent();
@@ -317,6 +363,44 @@ public class LaTotugaActivity extends ActionBarActivity {
         Uri uri = Uri.fromFile(mp3);
         player = MediaPlayer.create(this, uri);
         playerSeek.setMax(player.getDuration());
+        playerSeek.setProgress(0);
+
+        // 3. Start playing the reel.
+        onPlayAction(findViewById(R.id.playButton));
+        new Thread(updater).start();
+    }
+
+    /**
+     * Handles the play event (or pause if already playing).
+     * @param view The play button.
+     */
+    private void onPlayAction(View view) {
+        // 1. If no playing.. everything starts.
+        if (!player.isPlaying()) {
+            player.start();
+        } else {
+            player.pause();
+        }
+    }
+
+    /**
+     * Handles the stop event.
+     * @param view The stop button.
+     */
+    private void onStopAction(View view) {
+        if (player.isPlaying()) {
+            player.pause();
+            player.seekTo(0);
+        }
+    }
+
+    /**
+     * Assuming an actual reel playing, it modifies the seek bar
+     * state.
+     */
+    private void updatePlayer() {
+        playerSeek.setProgress(player.getCurrentPosition());
+        seekHandler.postDelayed(updater, Constants.SEEKER_DELAY);
     }
 
     /**
