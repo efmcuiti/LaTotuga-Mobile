@@ -12,6 +12,7 @@ import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -44,6 +45,7 @@ import org.tjdo.services.dto.Symphony;
 import org.tjdo.util.LaTotugaException;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -361,13 +363,26 @@ public class LaTotugaActivity extends ActionBarActivity {
 
         // 2. Prepare the media player.
         Uri uri = Uri.fromFile(mp3);
-        player = MediaPlayer.create(this, uri);
-        playerSeek.setMax(player.getDuration());
-        playerSeek.setProgress(0);
+        player = new MediaPlayer();
+        player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        try {
+            player.setDataSource(getApplicationContext(), uri);
+            player.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                @Override
+                public void onPrepared(MediaPlayer mp) {
+                    playerSeek.setMax(player.getDuration());
+                    playerSeek.setProgress(0);
 
-        // 3. Start playing the reel.
-        onPlayAction(findViewById(R.id.playButton));
-        new Thread(updater).start();
+                    // 3. Start playing the reel.
+                    onPlayAction(findViewById(R.id.playButton));
+                    new Thread(updater).start();
+                }
+            });
+            player.prepareAsync();
+        } catch (IOException e) {
+            Log.e(TAG, String.format("Couldn't load the mp3 %s", mp3.getName()), e);
+            return;
+        }
     }
 
     /**
