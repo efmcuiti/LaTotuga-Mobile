@@ -71,6 +71,7 @@
         </LinearLayout>
         <SeekBar
             android:id="@+id/playerSeek"
+            android:visibility="invisible"
             android:layout_width="match_parent"
             android:layout_height="32dp"
             android:layout_marginStart="16dp"

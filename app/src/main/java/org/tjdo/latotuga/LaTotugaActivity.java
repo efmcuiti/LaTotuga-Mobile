@@ -103,12 +103,6 @@ public class LaTotugaActivity extends ActionBarActivity {
     /** WHere to paint the actual symphony to which the child reel is playing. */
     private TextView symphonyNameLabel;
 
-    /** Handles the update of the reel player. */
-    private Handler seekHandler;
-
-    /** Updates the seeker. */
-    private Runnable updater;
-
     /* (non-Javadoc)
 	 * @see android.support.v7.app.ActionBarActivity#onCreate(android.os.Bundle)
 	 */
@@ -128,7 +122,6 @@ public class LaTotugaActivity extends ActionBarActivity {
         }
 
         // Init player component.
-        seekHandler = new Handler();
         playerSeek = (SeekBar) findViewById(R.id.playerSeek);
         childNameLabel = (TextView) findViewById(R.id.playerNameLabel);
         symphonyNameLabel = (TextView) findViewById(R.id.playerSymphonyLabel);
@@ -148,19 +141,18 @@ public class LaTotugaActivity extends ActionBarActivity {
                 onStopAction(v);
             }
         });
-        updater = new Runnable() {
-            /** {@inheritDoc} */
-            @Override
-            public void run() {
-                updatePlayer();
-            }
-        };
         playerSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             /** {@inheritDoc} */
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 if (player != null) {
                     player.seekTo(progress);
+                }
+
+                if (fromUser) {
+                    int secPro = playerSeek.getSecondaryProgress();
+                    Log.i(TAG, String.format("Found update from user %d", secPro));
+                    seekBar.setProgress(secPro);
                 }
             }
 
@@ -367,6 +359,13 @@ public class LaTotugaActivity extends ActionBarActivity {
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
         try {
             player.setDataSource(getApplicationContext(), uri);
+            player.setOnBufferingUpdateListener(new MediaPlayer.OnBufferingUpdateListener() {
+                @Override
+                public void onBufferingUpdate(MediaPlayer mp, int percent) {
+                    Log.i(TAG, String.format("Inside the buffering update %d", mp.getCurrentPosition()));
+                    playerSeek.setProgress(mp.getCurrentPosition());
+                }
+            });
             player.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 @Override
                 public void onPrepared(MediaPlayer mp) {
@@ -375,7 +374,8 @@ public class LaTotugaActivity extends ActionBarActivity {
 
                     // 3. Start playing the reel.
                     onPlayAction(findViewById(R.id.playButton));
-                    new Thread(updater).start();
+                    // AsyncTask<Void, Integer, Void> playback = prepareSeekUpdater();
+                    // playback.execute();
                 }
             });
             player.prepareAsync();
@@ -410,12 +410,43 @@ public class LaTotugaActivity extends ActionBarActivity {
     }
 
     /**
-     * Assuming an actual reel playing, it modifies the seek bar
-     * state.
+     * Creates a new asynchronous task to keep the tracking the playback
+     * of reels.
+     * @return The already prepared keep on tracking task.
      */
-    private void updatePlayer() {
-        playerSeek.setProgress(player.getCurrentPosition());
-        seekHandler.postDelayed(updater, Constants.SEEKER_DELAY);
+    private AsyncTask<Void, Integer, Void> prepareSeekUpdater(){
+        return new AsyncTask<Void, Integer, Void>() {
+            /** {@inheritDoc} */
+            @Override
+            protected Void doInBackground(Void... params) {
+                // 1. if the player has started and while the
+                // playback is running, the seek bar will be updated and once the playback
+                // is finished or interrupted, the thread will be stopped.
+                if (null == player) {
+                    return null;
+                }
+
+                int progress;
+                while (player.isPlaying() && !isCancelled()) {
+                    progress = player.getCurrentPosition();
+                    publishProgress(progress);
+                    // Wait a little bit.
+                    try {
+                        Thread.sleep(Constants.SEEKER_DELAY);
+                    } catch (InterruptedException e) {
+                        Log.e(TAG, String.format("Couldn't update seek bar."),e);
+                    }
+                }
+
+                return null;
+            }
+
+            /** {@inheritDoc} */
+            @Override
+            protected void onProgressUpdate(Integer... values) {
+                playerSeek.setProgress(values[0]);
+            }
+        };
     }
 
     /**
